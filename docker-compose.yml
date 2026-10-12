@@ -1,0 +1,127 @@
+cat << 'EOF' > docker-compose.yml
+version: '3.8'
+
+networks:
+  frontend-network:
+    driver: bridge
+  backend-network:
+    driver: bridge
+
+volumes:
+  db_data:
+  grafana_data:
+  loki_data:
+
+services:
+  mysql_db:
+    image: mysql:8.0
+    container_name: mysql_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: RootStrongPassword2026!
+      MYSQL_DATABASE: inventory_db
+      MYSQL_USER: inventory_user
+      MYSQL_PASSWORD: StrongPass_2026!Secured
+    networks:
+      - backend-network
+    volumes:
+      - db_data:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: mysql_db
+      MYSQL_ROOT_PASSWORD: RootStrongPassword2026!
+    networks:
+      - backend-network
+    depends_on:
+      - mysql_db
+
+  app:
+    build: ./app
+    container_name: inventory_app
+    restart: always
+    environment:
+      DB_HOST: mysql_db
+      DB_USER: inventory_user
+      DB_PASSWORD: StrongPass_2026!Secured
+      DB_NAME: inventory_db
+    networks:
+      - frontend-network
+      - backend-network
+    depends_on:
+      - mysql_db
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx_proxy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    networks:
+      - frontend-network
+    depends_on:
+      - app
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - frontend-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - frontend-network
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.0
+    container_name: cadvisor
+    restart: always
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - frontend-network
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+    networks:
+      - frontend-network
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: promtail
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - frontend-network
+EOF
